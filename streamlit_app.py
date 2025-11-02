@@ -4,13 +4,13 @@ import os
 from pypdf import PdfReader 
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib import font_manager # ★【修正】font_managerをインポート
+from matplotlib import font_manager
 from docx import Document
 from docx.shared import Inches
 from io import BytesIO
 
 # ==========================================================
-# ★【修正箇所】 Matplotlibで日本語フォントを設定 (フォントパスを直接指定)
+# Matplotlibで日本語フォントを設定
 # ==========================================================
 FONT_PATH = 'ipaexg.ttf' # アプリケーションのルートディレクトリに配置するフォントファイル名
 try:
@@ -66,12 +66,20 @@ except Exception as e:
 SYSTEM_PROMPT = """
 あなたは、統計分析の専門家であり、教育者です。
 ユーザーから提供された文書（研究計画、分析のメモ、データ構造の概要など）を深く理解し、以下の役割を担ってください。
-...
+
+1.  **記述統計とグラフの解説**: 提供されたCSVファイルの記述統計結果やグラフの内容を、分析の文脈に沿って分かりやすく解説します。
+2.  **推奨統計処理の提案**: ドキュメントの内容とデータの特性（記述統計、グラフ）に基づき、最も適切だと思われる統計手法を複数提案し、それぞれのメリット・デメリットを分かりやすく説明します。
+3.  **質問応答**: 統計学の概念、特定の手法、ツールの使い方（例：Pythonのライブラリ）など、ユーザーからのあらゆる質問に、初心者にも理解できるように丁寧に答えます。
+4.  **対話の記憶**: 過去の会話を記憶し、文脈に沿った対話を続けます。
+
+あなたの目的は、ユーザーが自身の研究や学習において、統計分析を正しく、かつ自信を持って活用できるようになることを支援することです。
 """
 
 # --- PDFファイルからテキストを抽出する関数 ---
 def read_pdf_text(pdf_file):
-    # ... (read_pdf_text関数は省略)
+    """
+    アップロードされたPDFファイルからすべてのページテキストを抽出する
+    """
     try:
         reader = PdfReader(pdf_file)
         text = ""
@@ -86,7 +94,9 @@ def read_pdf_text(pdf_file):
 
 # --- CSVファイルから構造と記述統計を抽出する関数 ---
 def get_csv_analysis_text(csv_file):
-    # ... (get_csv_analysis_text関数は省略)
+    """
+    アップロードされたCSVファイルから構造、記述統計を抽出し、データフレームをセッションに保存する
+    """
     try:
         csv_file.seek(0)
         df = pd.read_csv(csv_file)
@@ -132,9 +142,9 @@ def plot_data(df):
                 st.write(f"**{col}**")
                 
                 # ヒストグラム
-                fig_hist, ax_hist = plt.subplots(figsize=(6, 4))
+                # ★【修正】figsizeを (4, 3) に縮小
+                fig_hist, ax_hist = plt.subplots(figsize=(4, 3))
                 ax_hist.hist(df[col].dropna(), bins='auto', edgecolor='black')
-                # ★【修正】フォントプロパティを明示的に指定
                 ax_hist.set_title(title, fontproperties=font_prop if font_prop else None)
                 st.pyplot(fig_hist)
                 
@@ -145,9 +155,9 @@ def plot_data(df):
                 
                 # 箱ひげ図
                 title = f'{col} の箱ひげ図'
-                fig_box, ax_box = plt.subplots(figsize=(6, 4))
+                # ★【修正】figsizeを (4, 3) に縮小
+                fig_box, ax_box = plt.subplots(figsize=(4, 3))
                 ax_box.boxplot(df[col].dropna())
-                # ★【修正】フォントプロパティを明示的に指定
                 ax_box.set_title(title, fontproperties=font_prop if font_prop else None)
                 st.pyplot(fig_box)
                 
@@ -165,12 +175,11 @@ def plot_data(df):
             
             counts = df[col].value_counts().head(10)
             title = f'{col} の度数分布'
-            fig_bar, ax_bar = plt.subplots(figsize=(8, 5))
+            # ★【修正】figsizeを (6, 4) に縮小
+            fig_bar, ax_bar = plt.subplots(figsize=(6, 4))
             ax_bar.bar(counts.index.astype(str), counts.values)
-            # ★【修正】フォントプロパティを明示的に指定
             ax_bar.set_title(title, fontproperties=font_prop if font_prop else None)
             
-            # X軸のフォントも設定（tick_paramsではfontpropertiesを直接渡せないため、フォントマネージャーで設定したフォントを使う）
             if font_prop:
                 for label in ax_bar.get_xticklabels():
                     label.set_fontproperties(font_prop)
@@ -189,7 +198,9 @@ def plot_data(df):
 
 # --- Wordレポート生成関数 ---
 def create_word_report(analysis_content, summary_content, plot_images):
-    # ... (create_word_report関数は省略、変更なし)
+    """
+    AIの提案と記述統計、グラフをWordファイルとして生成する
+    """
     document = Document()
     document.add_heading('統計分析レポート', 0)
     document.add_paragraph(f'作成日時: {pd.Timestamp.now().strftime("%Y年%m月%d日 %H:%M:%S")}')
@@ -198,6 +209,7 @@ def create_word_report(analysis_content, summary_content, plot_images):
     # 1. AIによる推奨統計処理の提案
     document.add_heading('1. AIによる推奨統計処理の提案', level=1)
     
+    # MarkdownテキストをWordに変換する簡易処理
     for line in summary_content.split('\n'):
         if line.startswith('#'):
             level = line.count('#')
@@ -221,6 +233,7 @@ def create_word_report(analysis_content, summary_content, plot_images):
         for key, buf in plot_images.items():
             document.add_heading(key.replace('_', ' ').title(), level=2)
             buf.seek(0)
+            # Wordレポート上の幅は3.0インチに固定
             document.add_picture(buf, width=Inches(3.0)) 
     
     # WordファイルをBytesIOストリームに保存
