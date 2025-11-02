@@ -1,19 +1,3 @@
-承知いたしました。CSVの読み込み機能を追加し、PDF対応も維持した、統計分析支援チャットボットの**コード全体**を以下に表示します。
-
-このコードを実行する前に、**`requirements.txt`** に以下の4つのパッケージが含まれていることを確認し、インストールしてください。
-
-```txt
-streamlit
-google-genai
-pypdf
-pandas
-```
-
------
-
-## 💻 統計分析支援チャットボット (CSV・PDF対応版)
-
-```python
 import streamlit as st
 import google.generativeai as genai
 import os
