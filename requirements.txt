@@ -4,3 +4,4 @@ pypdf
 pandas
 tabulate
 matplotlib
+python-docx
