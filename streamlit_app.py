@@ -4,8 +4,9 @@ import os
 from pypdf import PdfReader 
 import pandas as pd
 import matplotlib.pyplot as plt
-from docx import Document # ★【追加】Wordファイル操作
-from io import BytesIO # ★【追加】メモリ上でデータを扱う
+from docx import Document
+from docx.shared import Inches # ★【修正】Inchesをインポート
+from io import BytesIO
 
 # --- アプリケーションの基本設定 ---
 st.set_page_config(
@@ -44,12 +45,20 @@ except Exception as e:
 SYSTEM_PROMPT = """
 あなたは、統計分析の専門家であり、教育者です。
 ユーザーから提供された文書（研究計画、分析のメモ、データ構造の概要など）を深く理解し、以下の役割を担ってください。
-# ... (SYSTEM_PROMPTは省略)
+
+1.  **記述統計とグラフの解説**: 提供されたCSVファイルの記述統計結果やグラフの内容を、分析の文脈に沿って分かりやすく解説します。
+2.  **推奨統計処理の提案**: ドキュメントの内容とデータの特性（記述統計、グラフ）に基づき、最も適切だと思われる統計手法を複数提案し、それぞれのメリット・デメリットを分かりやすく説明します。
+3.  **質問応答**: 統計学の概念、特定の手法、ツールの使い方（例：Pythonのライブラリ）など、ユーザーからのあらゆる質問に、初心者にも理解できるように丁寧に答えます。
+4.  **対話の記憶**: 過去の会話を記憶し、文脈に沿った対話を続けます。
+
+あなたの目的は、ユーザーが自身の研究や学習において、統計分析を正しく、かつ自信を持って活用できるようになることを支援することです。
 """
 
 # --- PDFファイルからテキストを抽出する関数 ---
 def read_pdf_text(pdf_file):
-    # ... (read_pdf_text関数は省略)
+    """
+    アップロードされたPDFファイルからすべてのページテキストを抽出する
+    """
     try:
         reader = PdfReader(pdf_file)
         text = ""
@@ -64,7 +73,9 @@ def read_pdf_text(pdf_file):
 
 # --- CSVファイルから構造と記述統計を抽出する関数 ---
 def get_csv_analysis_text(csv_file):
-    # ... (get_csv_analysis_text関数は省略)
+    """
+    アップロードされたCSVファイルから構造、記述統計を抽出し、データフレームをセッションに保存する
+    """
     try:
         csv_file.seek(0)
         df = pd.read_csv(csv_file)
@@ -96,7 +107,6 @@ def plot_data(df):
         st.warning("グラフ化できる適切なデータが見つかりませんでした。")
         return
 
-    # グラフの生成とセッションへの保存 (Wordレポート埋め込み用)
     st.session_state.plot_images = {}
     
     # 1. 数値型データのヒストグラム/箱ひげ図
@@ -114,7 +124,6 @@ def plot_data(df):
                 ax_hist.set_title(f'{col} のヒストグラム')
                 st.pyplot(fig_hist)
                 
-                # Word埋め込み用にBytesIOに保存
                 hist_buf = BytesIO()
                 fig_hist.savefig(hist_buf, format='png')
                 st.session_state.plot_images[f'{col}_hist'] = hist_buf
@@ -126,7 +135,6 @@ def plot_data(df):
                 ax_box.set_title(f'{col} の箱ひげ図')
                 st.pyplot(fig_box)
                 
-                # Word埋め込み用にBytesIOに保存
                 box_buf = BytesIO()
                 fig_box.savefig(box_buf, format='png')
                 st.session_state.plot_images[f'{col}_box'] = box_buf
@@ -147,7 +155,6 @@ def plot_data(df):
             plt.tight_layout()
             st.pyplot(fig_bar)
             
-            # Word埋め込み用にBytesIOに保存
             bar_buf = BytesIO()
             fig_bar.savefig(bar_buf, format='png')
             st.session_state.plot_images[f'{col}_bar'] = bar_buf
@@ -181,7 +188,7 @@ def create_word_report(analysis_content, summary_content, plot_images):
     # 2. アップロードされたファイルの概要/記述統計
     document.add_heading('2. ファイル概要と記述統計', level=1)
     
-    # ドキュメントの内容をそのまま追加 (MarkdownテーブルはWordでは整形されないため、テキストとして挿入)
+    # ドキュメントの内容をそのまま追加 
     document.add_paragraph(analysis_content)
     document.add_paragraph('---')
 
@@ -191,8 +198,8 @@ def create_word_report(analysis_content, summary_content, plot_images):
         for key, buf in plot_images.items():
             document.add_heading(key.replace('_', ' ').title(), level=2)
             buf.seek(0)
-            # 画像を挿入 (幅はレポート幅の約3インチに固定)
-            document.add_picture(buf, width=pd.NA)
+            # ★【修正箇所】widthにpd.NAの代わりにInches(3.0)を指定
+            document.add_picture(buf, width=Inches(3.0)) 
     
     # WordファイルをBytesIOストリームに保存
     doc_io = BytesIO()
@@ -214,7 +221,7 @@ if uploaded_file is not None:
         st.session_state.messages = []
         st.session_state.summary = None 
         st.session_state.data_df = pd.DataFrame()
-        st.session_state.plot_images = {} # グラフ画像をリセット
+        st.session_state.plot_images = {}
 
         file_extension = uploaded_file.name.split(".")[-1].lower()
         st.session_state.document_content = ""
@@ -246,11 +253,9 @@ if uploaded_file is not None:
     is_csv_file = st.session_state.last_uploaded_filename.split(".")[-1].lower() == "csv"
 
     if is_csv_file and not st.session_state.data_df.empty:
-        # CSVファイルの場合、記述統計の結果を常に表示
         with st.expander("📚 CSVデータ構造と記述統計の結果", expanded=True):
             st.markdown(st.session_state.document_content)
             
-        # グラフ化機能を実行 (結果はst.session_state.plot_imagesに格納される)
         plot_data(st.session_state.data_df)
         
     # --- AIによる推奨処理の提案 ---
@@ -288,7 +293,6 @@ if uploaded_file is not None:
                 st.session_state.get('plot_images', {})
             )
             
-            # ファイル名を決定
             base_name = os.path.splitext(st.session_state.last_uploaded_filename)[0]
             download_file_name = f"{base_name}_分析レポート.docx"
             
