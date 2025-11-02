@@ -12,16 +12,12 @@ from io import BytesIO
 # ==========================================================
 # Matplotlibで日本語フォントを設定
 # ==========================================================
-FONT_PATH = 'ipaexg.ttf' # アプリケーションのルートディレクトリに配置するフォントファイル名
+FONT_PATH = 'ipaexg.ttf' 
 try:
-    # フォントプロパティを作成
     font_prop = font_manager.FontProperties(fname=FONT_PATH)
     plt.rcParams['font.family'] = font_prop.get_name()
-    plt.rcParams['axes.unicode_minus'] = False # マイナス記号の表示を可能にする
-    
-    # グラフ描画時にフォントを明示的に指定できるように、プロパティをセッションに保存
+    plt.rcParams['axes.unicode_minus'] = False 
     st.session_state.font_prop = font_prop
-    
 except FileNotFoundError:
     st.warning(f"警告: 日本語フォントファイル '{FONT_PATH}' が見つかりません。グラフの日本語が文字化けする可能性があります。")
     plt.rcParams['font.family'] = 'DejaVu Sans'
@@ -66,20 +62,12 @@ except Exception as e:
 SYSTEM_PROMPT = """
 あなたは、統計分析の専門家であり、教育者です。
 ユーザーから提供された文書（研究計画、分析のメモ、データ構造の概要など）を深く理解し、以下の役割を担ってください。
-
-1.  **記述統計とグラフの解説**: 提供されたCSVファイルの記述統計結果やグラフの内容を、分析の文脈に沿って分かりやすく解説します。
-2.  **推奨統計処理の提案**: ドキュメントの内容とデータの特性（記述統計、グラフ）に基づき、最も適切だと思われる統計手法を複数提案し、それぞれのメリット・デメリットを分かりやすく説明します。
-3.  **質問応答**: 統計学の概念、特定の手法、ツールの使い方（例：Pythonのライブラリ）など、ユーザーからのあらゆる質問に、初心者にも理解できるように丁寧に答えます。
-4.  **対話の記憶**: 過去の会話を記憶し、文脈に沿った対話を続けます。
-
-あなたの目的は、ユーザーが自身の研究や学習において、統計分析を正しく、かつ自信を持って活用できるようになることを支援することです。
+...
 """
 
 # --- PDFファイルからテキストを抽出する関数 ---
 def read_pdf_text(pdf_file):
-    """
-    アップロードされたPDFファイルからすべてのページテキストを抽出する
-    """
+    # ... (read_pdf_text関数は省略)
     try:
         reader = PdfReader(pdf_file)
         text = ""
@@ -94,9 +82,7 @@ def read_pdf_text(pdf_file):
 
 # --- CSVファイルから構造と記述統計を抽出する関数 ---
 def get_csv_analysis_text(csv_file):
-    """
-    アップロードされたCSVファイルから構造、記述統計を抽出し、データフレームをセッションに保存する
-    """
+    # ... (get_csv_analysis_text関数は省略)
     try:
         csv_file.seek(0)
         df = pd.read_csv(csv_file)
@@ -129,7 +115,7 @@ def plot_data(df):
         return
 
     st.session_state.plot_images = {}
-    font_prop = st.session_state.get('font_prop', None) # フォントプロパティを取得
+    font_prop = st.session_state.get('font_prop', None)
 
     # 1. 数値型データのヒストグラム/箱ひげ図
     if numeric_cols:
@@ -142,8 +128,7 @@ def plot_data(df):
                 st.write(f"**{col}**")
                 
                 # ヒストグラム
-                # ★【修正】figsizeを (4, 3) に縮小
-                fig_hist, ax_hist = plt.subplots(figsize=(4, 3))
+                fig_hist, ax_hist = plt.subplots(figsize=(4, 3)) # サイズ縮小
                 ax_hist.hist(df[col].dropna(), bins='auto', edgecolor='black')
                 ax_hist.set_title(title, fontproperties=font_prop if font_prop else None)
                 st.pyplot(fig_hist)
@@ -155,8 +140,7 @@ def plot_data(df):
                 
                 # 箱ひげ図
                 title = f'{col} の箱ひげ図'
-                # ★【修正】figsizeを (4, 3) に縮小
-                fig_box, ax_box = plt.subplots(figsize=(4, 3))
+                fig_box, ax_box = plt.subplots(figsize=(4, 3)) # サイズ縮小
                 ax_box.boxplot(df[col].dropna())
                 ax_box.set_title(title, fontproperties=font_prop if font_prop else None)
                 st.pyplot(fig_box)
@@ -175,8 +159,7 @@ def plot_data(df):
             
             counts = df[col].value_counts().head(10)
             title = f'{col} の度数分布'
-            # ★【修正】figsizeを (6, 4) に縮小
-            fig_bar, ax_bar = plt.subplots(figsize=(6, 4))
+            fig_bar, ax_bar = plt.subplots(figsize=(6, 4)) # サイズ縮小
             ax_bar.bar(counts.index.astype(str), counts.values)
             ax_bar.set_title(title, fontproperties=font_prop if font_prop else None)
             
@@ -198,9 +181,7 @@ def plot_data(df):
 
 # --- Wordレポート生成関数 ---
 def create_word_report(analysis_content, summary_content, plot_images):
-    """
-    AIの提案と記述統計、グラフをWordファイルとして生成する
-    """
+    # ... (create_word_report関数は省略)
     document = Document()
     document.add_heading('統計分析レポート', 0)
     document.add_paragraph(f'作成日時: {pd.Timestamp.now().strftime("%Y年%m月%d日 %H:%M:%S")}')
@@ -209,7 +190,6 @@ def create_word_report(analysis_content, summary_content, plot_images):
     # 1. AIによる推奨統計処理の提案
     document.add_heading('1. AIによる推奨統計処理の提案', level=1)
     
-    # MarkdownテキストをWordに変換する簡易処理
     for line in summary_content.split('\n'):
         if line.startswith('#'):
             level = line.count('#')
@@ -233,7 +213,6 @@ def create_word_report(analysis_content, summary_content, plot_images):
         for key, buf in plot_images.items():
             document.add_heading(key.replace('_', ' ').title(), level=2)
             buf.seek(0)
-            # Wordレポート上の幅は3.0インチに固定
             document.add_picture(buf, width=Inches(3.0)) 
     
     # WordファイルをBytesIOストリームに保存
@@ -243,15 +222,22 @@ def create_word_report(analysis_content, summary_content, plot_images):
     return doc_io.getvalue()
 
 
+# ==========================================================
+# ★【レジューム機能の核となる修正】
+# ファイルアップロードと、セッションからのデータ復元を分離する
+# ==========================================================
+
 # ファイルアップローダー
 uploaded_file = st.file_uploader(
     "分析計画のファイル（.md、.txt、.pdf）またはデータファイル（.csv）をアップロードしてください",
     type=["md", "txt", "pdf", "csv"]
 )
 
+# 1. ファイルアップロード/変更の処理
 if uploaded_file is not None:
-    # ファイルが変わった場合、メッセージ履歴と要約をリセット
+    # ファイルが変わった場合、メッセージ履歴と要約をリセットして再処理
     if "last_uploaded_filename" not in st.session_state or st.session_state.last_uploaded_filename != uploaded_file.name:
+        
         st.session_state.last_uploaded_filename = uploaded_file.name
         st.session_state.messages = []
         st.session_state.summary = None 
@@ -272,27 +258,42 @@ if uploaded_file is not None:
                     st.session_state.document_content = get_csv_analysis_text(uploaded_file)
                 else:
                     st.error("サポートされていないファイル形式です。")
+                    # エラー時はセッションステートを空に戻して終了
+                    st.session_state.document_content = ""
                     st.stop()
             
             if st.session_state.document_content:
                 st.success(f"「{uploaded_file.name}」の読み込みが完了しました。")
             else:
                 st.warning(f"「{uploaded_file.name}」から内容を抽出できませんでした。ファイル内容を確認してください。")
+                st.session_state.document_content = "" # エラー処理
                 st.stop()
 
         except Exception as e:
             st.error(f"ファイル内容の処理中に致命的なエラーが発生しました: {e}")
+            st.session_state.document_content = "" # エラー処理
             st.stop()
     
-    # --- 記述統計とグラフの表示 ---
-    is_csv_file = st.session_state.last_uploaded_filename.split(".")[-1].lower() == "csv"
+# 2. メインロジック（レジューム処理）
+# セッションステートに文書内容があれば、リフレッシュ後も処理を継続する
+if "document_content" in st.session_state and st.session_state.document_content:
 
+    # ファイルタイプはセッションに保存されたファイル名から判断
+    uploaded_file_name = st.session_state.last_uploaded_filename
+    is_csv_file = uploaded_file_name.split(".")[-1].lower() == "csv"
+
+    # --- 記述統計とグラフの表示 ---
     if is_csv_file and not st.session_state.data_df.empty:
         with st.expander("📚 CSVデータ構造と記述統計の結果", expanded=True):
             st.markdown(st.session_state.document_content)
             
-        plot_data(st.session_state.data_df)
+        # グラフデータがセッションにまだない場合（例: 初回ロード時）のみグラフを生成
+        if not st.session_state.plot_images:
+            plot_data(st.session_state.data_df)
         
+        # グラフの表示（セッションに保存されたものがあればそれを表示）
+        # plot_data関数内でst.pyplot()が呼ばれるため、ここでは追加の呼び出しは不要
+
     # --- AIによる推奨処理の提案 ---
     if st.session_state.document_content and not st.session_state.summary:
         with st.spinner("AIが推奨統計処理の提案を作成しています..."):
@@ -381,4 +382,5 @@ if uploaded_file is not None:
             st.error(f"応答の生成中にエラーが発生しました: {e}")
 
 else:
+    # document_content がない場合（初回ロード時など）
     st.info("ファイルをアップロードすると、チャットが開始できます。")
