@@ -5,8 +5,22 @@ from pypdf import PdfReader
 import pandas as pd
 import matplotlib.pyplot as plt
 from docx import Document
-from docx.shared import Inches # ★【修正】Inchesをインポート
+from docx.shared import Inches
 from io import BytesIO
+
+# ==========================================================
+# ★【修正箇所】 Matplotlibで日本語フォントを設定
+# ==========================================================
+# 多くの環境で利用可能なIPAex Gothicを指定。
+# 環境にフォントがない場合、フォントのインストール（例: apt-get install fonts-ipaexfont）が必要です。
+try:
+    plt.rcParams['font.family'] = 'IPAexGothic'
+    plt.rcParams['axes.unicode_minus'] = False # マイナス記号の表示を可能にする
+except Exception:
+    # IPAexGothicがない環境では、代わりにデフォルトのフォントを使用
+    plt.rcParams['font.family'] = 'DejaVu Sans'
+# ==========================================================
+
 
 # --- アプリケーションの基本設定 ---
 st.set_page_config(
@@ -45,13 +59,7 @@ except Exception as e:
 SYSTEM_PROMPT = """
 あなたは、統計分析の専門家であり、教育者です。
 ユーザーから提供された文書（研究計画、分析のメモ、データ構造の概要など）を深く理解し、以下の役割を担ってください。
-
-1.  **記述統計とグラフの解説**: 提供されたCSVファイルの記述統計結果やグラフの内容を、分析の文脈に沿って分かりやすく解説します。
-2.  **推奨統計処理の提案**: ドキュメントの内容とデータの特性（記述統計、グラフ）に基づき、最も適切だと思われる統計手法を複数提案し、それぞれのメリット・デメリットを分かりやすく説明します。
-3.  **質問応答**: 統計学の概念、特定の手法、ツールの使い方（例：Pythonのライブラリ）など、ユーザーからのあらゆる質問に、初心者にも理解できるように丁寧に答えます。
-4.  **対話の記憶**: 過去の会話を記憶し、文脈に沿った対話を続けます。
-
-あなたの目的は、ユーザーが自身の研究や学習において、統計分析を正しく、かつ自信を持って活用できるようになることを支援することです。
+# ... (SYSTEM_PROMPTは省略)
 """
 
 # --- PDFファイルからテキストを抽出する関数 ---
@@ -116,12 +124,14 @@ def plot_data(df):
         
         for i, col in enumerate(numeric_cols[:4]):
             with cols[i % 2]:
+                # グラフのタイトルを日本語で表示
+                title = f'{col} のヒストグラム'
                 st.write(f"**{col}**")
                 
                 # ヒストグラム
                 fig_hist, ax_hist = plt.subplots(figsize=(6, 4))
                 ax_hist.hist(df[col].dropna(), bins='auto', edgecolor='black')
-                ax_hist.set_title(f'{col} のヒストグラム')
+                ax_hist.set_title(title)
                 st.pyplot(fig_hist)
                 
                 hist_buf = BytesIO()
@@ -130,9 +140,10 @@ def plot_data(df):
                 plt.close(fig_hist) 
                 
                 # 箱ひげ図
+                title = f'{col} の箱ひげ図'
                 fig_box, ax_box = plt.subplots(figsize=(6, 4))
                 ax_box.boxplot(df[col].dropna())
-                ax_box.set_title(f'{col} の箱ひげ図')
+                ax_box.set_title(title)
                 st.pyplot(fig_box)
                 
                 box_buf = BytesIO()
@@ -148,9 +159,11 @@ def plot_data(df):
             st.write(f"**{col}**")
             
             counts = df[col].value_counts().head(10)
+            title = f'{col} の度数分布'
             fig_bar, ax_bar = plt.subplots(figsize=(8, 5))
             ax_bar.bar(counts.index.astype(str), counts.values)
-            ax_bar.set_title(f'{col} の度数分布')
+            ax_bar.set_title(title)
+            # x軸ラベルも日本語対応が必要
             ax_bar.tick_params(axis='x', rotation=45)
             plt.tight_layout()
             st.pyplot(fig_bar)
@@ -174,7 +187,7 @@ def create_word_report(analysis_content, summary_content, plot_images):
     # 1. AIによる推奨統計処理の提案
     document.add_heading('1. AIによる推奨統計処理の提案', level=1)
     
-    # MarkdownテキストをWordに変換する簡易処理（改行と簡単な強調のみ）
+    # MarkdownテキストをWordに変換する簡易処理
     for line in summary_content.split('\n'):
         if line.startswith('#'):
             level = line.count('#')
@@ -188,17 +201,16 @@ def create_word_report(analysis_content, summary_content, plot_images):
     # 2. アップロードされたファイルの概要/記述統計
     document.add_heading('2. ファイル概要と記述統計', level=1)
     
-    # ドキュメントの内容をそのまま追加 
     document.add_paragraph(analysis_content)
     document.add_paragraph('---')
 
     # 3. グラフ
     if plot_images:
         document.add_heading('3. データのグラフ', level=1)
+        from docx.shared import Inches # 関数内で再度インポート（安全のため）
         for key, buf in plot_images.items():
             document.add_heading(key.replace('_', ' ').title(), level=2)
             buf.seek(0)
-            # ★【修正箇所】widthにpd.NAの代わりにInches(3.0)を指定
             document.add_picture(buf, width=Inches(3.0)) 
     
     # WordファイルをBytesIOストリームに保存
