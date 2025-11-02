@@ -32,7 +32,8 @@ if not gemini_api_key:
 # APIキーの認証
 try:
     genai.configure(api_key=gemini_api_key)
-    model = genai.GenerativeModel("gemini-pro")
+    # ★ モデル名を gemini-2.5-flash に変更
+    model = genai.GenerativeModel("gemini-2.5-flash") 
 except Exception as e:
     st.error(f"APIキーの認証に失敗しました。正しいキーを入力してください。: {e}")
     st.stop()
@@ -56,7 +57,6 @@ def read_pdf_text(pdf_file):
     アップロードされたPDFファイルからすべてのページテキストを抽出する
     """
     try:
-        # StreamlitのUploadedFileオブジェクトをPdfReaderに渡す
         reader = PdfReader(pdf_file)
         text = ""
         for page in reader.pages:
@@ -74,15 +74,11 @@ def read_csv_text(csv_file):
     アップロードされたCSVファイルから構造と最初の数行を抽出する
     """
     try:
-        # StreamlitのUploadedFileオブジェクトからCSVを読み込む
-        # ファイルポインタがリセットされていない可能性を考慮し、読み込み前にリセット
         csv_file.seek(0)
         df = pd.read_csv(csv_file)
         
-        # カラム情報（名前とデータ型）の作成
         col_info = "\n".join([f"- {col}: {dtype}" for col, dtype in df.dtypes.items()])
 
-        # 最初の5行をMarkdownテーブルとして表示
         sample_data = df.head(5).to_markdown(index=False)
         
         content = (
@@ -173,30 +169,24 @@ if uploaded_file is not None:
 
     # ユーザーからの新しいメッセージ
     if prompt := st.chat_input("ファイル内容について質問してください"):
-        # ユーザーのメッセージを保存して表示
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # AIからの応答を生成・表示
         try:
             with st.chat_message("assistant"):
                 with st.spinner("AIが応答を生成中です..."):
-                    # プロンプトにシステム設定、ドキュメント、会話履歴をすべて含める
                     full_prompt = (
                         f"{SYSTEM_PROMPT}\n\n"
                         f"--- 以下はアップロードされたドキュメントです ---\n"
                         f"{st.session_state.document_content}\n\n"
                         f"--- 以下はこれまでの会話履歴と現在の質問です ---\n"
                     )
-                    # メッセージ履歴をプロンプトに追加
                     for msg in st.session_state.messages:
                         full_prompt += f"{msg['role']}: {msg['content']}\n"
 
-                    # ストリーミングで応答を生成
                     response_stream = model.generate_content(full_prompt, stream=True)
                     
-                    # レスポンスを結合するための変数
                     full_response = ""
                     response_placeholder = st.empty()
                     for chunk in response_stream:
@@ -205,7 +195,6 @@ if uploaded_file is not None:
                             response_placeholder.markdown(full_response + " ▌")
                     response_placeholder.markdown(full_response)
 
-            # AIの応答をセッション状態に保存
             st.session_state.messages.append({"role": "assistant", "content": full_response})
 
         except Exception as e:
