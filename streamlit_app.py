@@ -62,12 +62,20 @@ except Exception as e:
 SYSTEM_PROMPT = """
 あなたは、統計分析の専門家であり、教育者です。
 ユーザーから提供された文書（研究計画、分析のメモ、データ構造の概要など）を深く理解し、以下の役割を担ってください。
-...
+
+1.  **記述統計とグラフの解説**: 提供されたCSVファイルの記述統計結果やグラフの内容を、分析の文脈に沿って分かりやすく解説します。
+2.  **推奨統計処理の提案**: ドキュメントの内容とデータの特性（記述統計、グラフ）に基づき、最も適切だと思われる統計手法を複数提案し、それぞれのメリット・デメリットを分かりやすく説明します。
+3.  **質問応答**: 統計学の概念、特定の手法、ツールの使い方（例：Pythonのライブラリ）など、ユーザーからのあらゆる質問に、初心者にも理解できるように丁寧に答えます。
+4.  **対話の記憶**: 過去の会話を記憶し、文脈に沿った対話を続けます。
+
+あなたの目的は、ユーザーが自身の研究や学習において、統計分析を正しく、かつ自信を持って活用できるようになることを支援することです。
 """
 
 # --- PDFファイルからテキストを抽出する関数 ---
 def read_pdf_text(pdf_file):
-    # ... (read_pdf_text関数は省略)
+    """
+    アップロードされたPDFファイルからすべてのページテキストを抽出する
+    """
     try:
         reader = PdfReader(pdf_file)
         text = ""
@@ -82,7 +90,9 @@ def read_pdf_text(pdf_file):
 
 # --- CSVファイルから構造と記述統計を抽出する関数 ---
 def get_csv_analysis_text(csv_file):
-    # ... (get_csv_analysis_text関数は省略)
+    """
+    アップロードされたCSVファイルから構造、記述統計を抽出し、データフレームをセッションに保存する
+    """
     try:
         csv_file.seek(0)
         df = pd.read_csv(csv_file)
@@ -103,66 +113,60 @@ def get_csv_analysis_text(csv_file):
         st.session_state.data_df = pd.DataFrame()
         return ""
 
-# --- グラフ描画機能 ---
-def plot_data(df):
-    st.subheader("📊 データのグラフ化")
+# --- グラフ生成およびセッションへの保存機能 (st.pyplotは呼ばない) ---
+def generate_and_store_plots(df):
+    """
+    グラフを生成し、図オブジェクトと画像バッファをセッションに保存する。
+    利用可能なグラフのタイトルリストを返す。
+    """
+    st.session_state.plot_images = {} # Wordレポート用バッファ
+    st.session_state.plot_figures = {} # Streamlit表示用figureオブジェクト
+    available_plots = []
     
+    font_prop = st.session_state.get('font_prop', None)
+
     numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
     object_cols = df.select_dtypes(include=['object']).columns.tolist()
     
-    if not numeric_cols and not object_cols:
-        st.warning("グラフ化できる適切なデータが見つかりませんでした。")
-        return
-
-    st.session_state.plot_images = {}
-    font_prop = st.session_state.get('font_prop', None)
-
     # 1. 数値型データのヒストグラム/箱ひげ図
     if numeric_cols:
-        st.markdown("#### 🔢 数値データの分布")
-        cols = st.columns(2)
-        
-        for i, col in enumerate(numeric_cols[:4]):
-            with cols[i % 2]:
-                title = f'{col} のヒストグラム'
-                st.write(f"**{col}**")
-                
-                # ヒストグラム
-                fig_hist, ax_hist = plt.subplots(figsize=(4, 3)) # サイズ縮小
-                ax_hist.hist(df[col].dropna(), bins='auto', edgecolor='black')
-                ax_hist.set_title(title, fontproperties=font_prop if font_prop else None)
-                st.pyplot(fig_hist)
-                
-                hist_buf = BytesIO()
-                fig_hist.savefig(hist_buf, format='png')
-                st.session_state.plot_images[f'{col}_hist'] = hist_buf
-                plt.close(fig_hist) 
-                
-                # 箱ひげ図
-                title = f'{col} の箱ひげ図'
-                fig_box, ax_box = plt.subplots(figsize=(4, 3)) # サイズ縮小
-                ax_box.boxplot(df[col].dropna())
-                ax_box.set_title(title, fontproperties=font_prop if font_prop else None)
-                st.pyplot(fig_box)
-                
-                box_buf = BytesIO()
-                fig_box.savefig(box_buf, format='png')
-                st.session_state.plot_images[f'{col}_box'] = box_buf
-                plt.close(fig_box) 
-                
+        for col in numeric_cols[:4]: # サンプルとして最初の4つ
+            # ヒストグラム
+            hist_title = f'{col} のヒストグラム'
+            fig_hist, ax_hist = plt.subplots(figsize=(4, 3))
+            ax_hist.hist(df[col].dropna(), bins='auto', edgecolor='black')
+            ax_hist.set_title(hist_title, fontproperties=font_prop if font_prop else None)
+            
+            # 保存
+            hist_buf = BytesIO()
+            fig_hist.savefig(hist_buf, format='png')
+            st.session_state.plot_images[hist_title] = hist_buf
+            st.session_state.plot_figures[hist_title] = fig_hist
+            available_plots.append(hist_title)
+            
+            # 箱ひげ図
+            box_title = f'{col} の箱ひげ図'
+            fig_box, ax_box = plt.subplots(figsize=(4, 3))
+            ax_box.boxplot(df[col].dropna())
+            ax_box.set_title(box_title, fontproperties=font_prop if font_prop else None)
+            
+            # 保存
+            box_buf = BytesIO()
+            fig_box.savefig(box_buf, format='png')
+            st.session_state.plot_images[box_title] = box_buf
+            st.session_state.plot_figures[box_title] = fig_box
+            available_plots.append(box_title)
+
     # 2. カテゴリ型データの度数分布
     if object_cols:
-        st.markdown("#### 🔠 カテゴリデータの分布")
-        
-        for col in object_cols[:2]:
-            st.write(f"**{col}**")
-            
+        for col in object_cols[:2]: # サンプルとして最初の2つ
+            bar_title = f'{col} の度数分布'
             counts = df[col].value_counts().head(10)
-            title = f'{col} の度数分布'
-            fig_bar, ax_bar = plt.subplots(figsize=(6, 4)) # サイズ縮小
+            fig_bar, ax_bar = plt.subplots(figsize=(6, 4))
             ax_bar.bar(counts.index.astype(str), counts.values)
-            ax_bar.set_title(title, fontproperties=font_prop if font_prop else None)
+            ax_bar.set_title(bar_title, fontproperties=font_prop if font_prop else None)
             
+            # フォント設定
             if font_prop:
                 for label in ax_bar.get_xticklabels():
                     label.set_fontproperties(font_prop)
@@ -171,17 +175,25 @@ def plot_data(df):
             
             ax_bar.tick_params(axis='x', rotation=45)
             plt.tight_layout()
-            st.pyplot(fig_bar)
             
+            # 保存
             bar_buf = BytesIO()
             fig_bar.savefig(bar_buf, format='png')
-            st.session_state.plot_images[f'{col}_bar'] = bar_buf
-            plt.close(fig_bar)
+            st.session_state.plot_images[bar_title] = bar_buf
+            st.session_state.plot_figures[bar_title] = fig_bar
+            available_plots.append(bar_title)
 
+    st.session_state.available_plots = available_plots
+    
+    # 最後に、生成したfigureオブジェクトを全てクローズしてメモリを解放（st.session_stateに保存されているため問題ない）
+    for fig in st.session_state.plot_figures.values():
+        plt.close(fig)
 
 # --- Wordレポート生成関数 ---
 def create_word_report(analysis_content, summary_content, plot_images):
-    # ... (create_word_report関数は省略)
+    """
+    AIの提案と記述統計、グラフをWordファイルとして生成する
+    """
     document = Document()
     document.add_heading('統計分析レポート', 0)
     document.add_paragraph(f'作成日時: {pd.Timestamp.now().strftime("%Y年%m月%d日 %H:%M:%S")}')
@@ -222,11 +234,6 @@ def create_word_report(analysis_content, summary_content, plot_images):
     return doc_io.getvalue()
 
 
-# ==========================================================
-# ★【レジューム機能の核となる修正】
-# ファイルアップロードと、セッションからのデータ復元を分離する
-# ==========================================================
-
 # ファイルアップローダー
 uploaded_file = st.file_uploader(
     "分析計画のファイル（.md、.txt、.pdf）またはデータファイル（.csv）をアップロードしてください",
@@ -235,7 +242,6 @@ uploaded_file = st.file_uploader(
 
 # 1. ファイルアップロード/変更の処理
 if uploaded_file is not None:
-    # ファイルが変わった場合、メッセージ履歴と要約をリセットして再処理
     if "last_uploaded_filename" not in st.session_state or st.session_state.last_uploaded_filename != uploaded_file.name:
         
         st.session_state.last_uploaded_filename = uploaded_file.name
@@ -243,6 +249,8 @@ if uploaded_file is not None:
         st.session_state.summary = None 
         st.session_state.data_df = pd.DataFrame()
         st.session_state.plot_images = {}
+        st.session_state.plot_figures = {} # 新しいfigureオブジェクトをリセット
+        st.session_state.available_plots = [] # 利用可能なグラフリストをリセット
 
         file_extension = uploaded_file.name.split(".")[-1].lower()
         st.session_state.document_content = ""
@@ -255,10 +263,10 @@ if uploaded_file is not None:
                 elif file_extension == "pdf":
                     st.session_state.document_content = read_pdf_text(uploaded_file)
                 elif file_extension == "csv":
+                    # CSVの場合は、記述統計結果とデータフレームをセッションに格納
                     st.session_state.document_content = get_csv_analysis_text(uploaded_file)
                 else:
                     st.error("サポートされていないファイル形式です。")
-                    # エラー時はセッションステートを空に戻して終了
                     st.session_state.document_content = ""
                     st.stop()
             
@@ -266,34 +274,54 @@ if uploaded_file is not None:
                 st.success(f"「{uploaded_file.name}」の読み込みが完了しました。")
             else:
                 st.warning(f"「{uploaded_file.name}」から内容を抽出できませんでした。ファイル内容を確認してください。")
-                st.session_state.document_content = "" # エラー処理
+                st.session_state.document_content = ""
                 st.stop()
 
         except Exception as e:
             st.error(f"ファイル内容の処理中に致命的なエラーが発生しました: {e}")
-            st.session_state.document_content = "" # エラー処理
+            st.session_state.document_content = ""
             st.stop()
     
 # 2. メインロジック（レジューム処理）
-# セッションステートに文書内容があれば、リフレッシュ後も処理を継続する
 if "document_content" in st.session_state and st.session_state.document_content:
 
-    # ファイルタイプはセッションに保存されたファイル名から判断
     uploaded_file_name = st.session_state.last_uploaded_filename
     is_csv_file = uploaded_file_name.split(".")[-1].lower() == "csv"
 
-    # --- 記述統計とグラフの表示 ---
+    # --- 記述統計とグラフの準備/表示 ---
     if is_csv_file and not st.session_state.data_df.empty:
         with st.expander("📚 CSVデータ構造と記述統計の結果", expanded=True):
             st.markdown(st.session_state.document_content)
             
-        # グラフデータがセッションにまだない場合（例: 初回ロード時）のみグラフを生成
-        if not st.session_state.plot_images:
-            plot_data(st.session_state.data_df)
-        
-        # グラフの表示（セッションに保存されたものがあればそれを表示）
-        # plot_data関数内でst.pyplot()が呼ばれるため、ここでは追加の呼び出しは不要
+        # グラフデータがセッションにまだない場合（初回ロード時）のみグラフを生成
+        if not st.session_state.available_plots:
+            with st.spinner("グラフを生成しています..."):
+                generate_and_store_plots(st.session_state.data_df)
 
+        st.subheader("📊 データのグラフ化")
+        
+        # グラフ選択リスト
+        selected_plots = st.multiselect(
+            "表示するグラフを選択してください",
+            st.session_state.available_plots,
+            default=st.session_state.available_plots # デフォルトで全て選択
+        )
+        
+        # 選択されたグラフの表示
+        if selected_plots:
+            # グラフを2列で表示
+            cols = st.columns(2)
+            col_index = 0
+            for plot_title in selected_plots:
+                with cols[col_index % 2]:
+                    fig = st.session_state.plot_figures.get(plot_title)
+                    if fig:
+                        # figを再利用して表示
+                        st.pyplot(fig)
+                col_index += 1
+        else:
+            st.info("表示するグラフを選択してください。")
+        
     # --- AIによる推奨処理の提案 ---
     if st.session_state.document_content and not st.session_state.summary:
         with st.spinner("AIが推奨統計処理の提案を作成しています..."):
