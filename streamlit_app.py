@@ -1,46 +1,24 @@
-CSVファイルの読み込み機能を追加する修正案を作成しました。
+承知いたしました。CSVの読み込み機能を追加し、PDF対応も維持した、統計分析支援チャットボットの**コード全体**を以下に表示します。
 
-CSVファイルはデータそのものであるため、AIが分析の文脈を理解しやすいように、ファイル全体をテキストとして渡すのではなく、**データフレームの構造（カラム名とデータ型）と最初の数行**を要約してテキストとして渡すアプローチを採用します。これにより、トークン数の節約にもなり、大規模なCSVファイルに対応しやすくなります。
-
-## 🛠️ 変更点の概要
-
-1.  **`requirements.txt` の更新**: CSVファイルを効率的に扱うための **`pandas`** パッケージを追加します。
-2.  **`streamlit_app.py` の修正**:
-      * `pandas` をインポート。
-      * `st.file_uploader` で `"csv"` を許可。
-      * CSVを読み込み、構造を要約テキストとして生成する新しいロジックを追加。
-
------
-
-## 1\. `requirements.txt` の更新
-
-以下の内容を **`requirements.txt`** に追記（または確認）してください。
+このコードを実行する前に、**`requirements.txt`** に以下の4つのパッケージが含まれていることを確認し、インストールしてください。
 
 ```txt
 streamlit
 google-genai
 pypdf
-pandas  # ★これを追加
-```
-
-ローカルで実行する場合は、忘れずにインストールしてください。
-
-```bash
-pip install -r requirements.txt
+pandas
 ```
 
 -----
 
-## 2\. `streamlit_app.py` の修正
-
-`pandas` をインポートし、CSVファイル処理用の関数とロジックを追加したコード全体を以下に示します。
+## 💻 統計分析支援チャットボット (CSV・PDF対応版)
 
 ```python
 import streamlit as st
 import google.generativeai as genai
 import os
-from pypdf import PdfReader
-import pandas as pd # ★【追加】pandasをインポート
+from pypdf import PdfReader 
+import pandas as pd
 
 # --- アプリケーションの基本設定 ---
 st.set_page_config(
@@ -78,7 +56,7 @@ except Exception as e:
 # --- プロンプト設定 ---
 SYSTEM_PROMPT = """
 あなたは、統計分析の専門家であり、教育者です。
-ユーザーから提供された文書（研究計画や分析したいことのメモ）を深く理解し、以下の役割を担ってください。
+ユーザーから提供された文書（研究計画や分析したいことのメモ、データ構造の概要など）を深く理解し、以下の役割を担ってください。
 
 1.  **統計手法の提案**: 文書の内容に基づき、最も適切だと思われる統計手法を複数提案し、それぞれのメリット・デメリットを分かりやすく説明します。
 2.  **質問応答**: 統計学の概念、特定の手法、ツールの使い方（例：Pythonのライブラリ）など、ユーザーからのあらゆる質問に、初心者にも理解できるように丁寧に答えます。
@@ -94,6 +72,7 @@ def read_pdf_text(pdf_file):
     アップロードされたPDFファイルからすべてのページテキストを抽出する
     """
     try:
+        # StreamlitのUploadedFileオブジェクトをPdfReaderに渡す
         reader = PdfReader(pdf_file)
         text = ""
         for page in reader.pages:
@@ -112,6 +91,8 @@ def read_csv_text(csv_file):
     """
     try:
         # StreamlitのUploadedFileオブジェクトからCSVを読み込む
+        # ファイルポインタがリセットされていない可能性を考慮し、読み込み前にリセット
+        csv_file.seek(0)
         df = pd.read_csv(csv_file)
         
         # カラム情報（名前とデータ型）の作成
@@ -133,7 +114,6 @@ def read_csv_text(csv_file):
 
 # ファイルアップローダー
 uploaded_file = st.file_uploader(
-    # ★【修正】typeリストに "csv" を追加
     "分析計画のファイル（.md、.txt、.pdf、.csv）をアップロードしてください",
     type=["md", "txt", "pdf", "csv"]
 )
@@ -158,7 +138,7 @@ if uploaded_file is not None:
                 elif file_extension == "pdf":
                     # .pdf の場合
                     st.session_state.document_content = read_pdf_text(uploaded_file)
-                elif file_extension == "csv": # ★【追加】CSVの場合の処理
+                elif file_extension == "csv":
                     # .csv の場合
                     st.session_state.document_content = read_csv_text(uploaded_file)
                 else:
@@ -225,6 +205,7 @@ if uploaded_file is not None:
                         f"{st.session_state.document_content}\n\n"
                         f"--- 以下はこれまでの会話履歴と現在の質問です ---\n"
                     )
+                    # メッセージ履歴をプロンプトに追加
                     for msg in st.session_state.messages:
                         full_prompt += f"{msg['role']}: {msg['content']}\n"
 
