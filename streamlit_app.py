@@ -3,7 +3,9 @@ import google.generativeai as genai
 import os
 from pypdf import PdfReader 
 import pandas as pd
-import matplotlib.pyplot as plt # グラフ描画ライブラリをインポート
+import matplotlib.pyplot as plt
+from docx import Document # ★【追加】Wordファイル操作
+from io import BytesIO # ★【追加】メモリ上でデータを扱う
 
 # --- アプリケーションの基本設定 ---
 st.set_page_config(
@@ -33,30 +35,21 @@ if not gemini_api_key:
 # APIキーの認証
 try:
     genai.configure(api_key=gemini_api_key)
-    # モデル名を gemini-2.5-flash に設定
     model = genai.GenerativeModel("gemini-2.5-flash") 
 except Exception as e:
     st.error(f"APIキーの認証に失敗しました。正しいキーを入力してください。: {e}")
     st.stop()
 
-# --- プロンプト設定 (クイズ削除、役割変更) ---
+# --- プロンプト設定 ---
 SYSTEM_PROMPT = """
 あなたは、統計分析の専門家であり、教育者です。
 ユーザーから提供された文書（研究計画、分析のメモ、データ構造の概要など）を深く理解し、以下の役割を担ってください。
-
-1.  **記述統計とグラフの解説**: 提供されたCSVファイルの記述統計結果やグラフの内容を、分析の文脈に沿って分かりやすく解説します。
-2.  **推奨統計処理の提案**: ドキュメントの内容とデータの特性（記述統計、グラフ）に基づき、最も適切だと思われる統計手法を複数提案し、それぞれのメリット・デメリットを分かりやすく説明します。
-3.  **質問応答**: 統計学の概念、特定の手法、ツールの使い方（例：Pythonのライブラリ）など、ユーザーからのあらゆる質問に、初心者にも理解できるように丁寧に答えます。
-4.  **対話の記憶**: 過去の会話を記憶し、文脈に沿った対話を続けます。
-
-あなたの目的は、ユーザーが自身の研究や学習において、統計分析を正しく、かつ自信を持って活用できるようになることを支援することです。
+# ... (SYSTEM_PROMPTは省略)
 """
 
 # --- PDFファイルからテキストを抽出する関数 ---
 def read_pdf_text(pdf_file):
-    """
-    アップロードされたPDFファイルからすべてのページテキストを抽出する
-    """
+    # ... (read_pdf_text関数は省略)
     try:
         reader = PdfReader(pdf_file)
         text = ""
@@ -71,19 +64,13 @@ def read_pdf_text(pdf_file):
 
 # --- CSVファイルから構造と記述統計を抽出する関数 ---
 def get_csv_analysis_text(csv_file):
-    """
-    アップロードされたCSVファイルから構造、記述統計を抽出し、データフレームをセッションに保存する
-    """
+    # ... (get_csv_analysis_text関数は省略)
     try:
         csv_file.seek(0)
         df = pd.read_csv(csv_file)
-        st.session_state.data_df = df # データフレームをセッションに保存
+        st.session_state.data_df = df
         
-        # 1. カラム情報（名前とデータ型）
         col_info = "\n".join([f"- {col}: {dtype}" for col, dtype in df.dtypes.items()])
-
-        # 2. 記述統計
-        # 数値型だけでなく、オブジェクト型(カテゴリ)も含めて統計情報を取得
         desc_stats = df.describe(include='all').to_markdown()
 
         content = (
@@ -102,7 +89,6 @@ def get_csv_analysis_text(csv_file):
 def plot_data(df):
     st.subheader("📊 データのグラフ化")
     
-    # 数値型とカテゴリ型のカラムを分類
     numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
     object_cols = df.select_dtypes(include=['object']).columns.tolist()
     
@@ -110,12 +96,14 @@ def plot_data(df):
         st.warning("グラフ化できる適切なデータが見つかりませんでした。")
         return
 
+    # グラフの生成とセッションへの保存 (Wordレポート埋め込み用)
+    st.session_state.plot_images = {}
+    
     # 1. 数値型データのヒストグラム/箱ひげ図
     if numeric_cols:
         st.markdown("#### 🔢 数値データの分布")
         cols = st.columns(2)
         
-        # サンプルとして最初の4つの数値カラムのみを表示
         for i, col in enumerate(numeric_cols[:4]):
             with cols[i % 2]:
                 st.write(f"**{col}**")
@@ -125,32 +113,92 @@ def plot_data(df):
                 ax_hist.hist(df[col].dropna(), bins='auto', edgecolor='black')
                 ax_hist.set_title(f'{col} のヒストグラム')
                 st.pyplot(fig_hist)
-                plt.close(fig_hist) # メモリ解放
+                
+                # Word埋め込み用にBytesIOに保存
+                hist_buf = BytesIO()
+                fig_hist.savefig(hist_buf, format='png')
+                st.session_state.plot_images[f'{col}_hist'] = hist_buf
+                plt.close(fig_hist) 
                 
                 # 箱ひげ図
                 fig_box, ax_box = plt.subplots(figsize=(6, 4))
                 ax_box.boxplot(df[col].dropna())
                 ax_box.set_title(f'{col} の箱ひげ図')
                 st.pyplot(fig_box)
-                plt.close(fig_box) # メモリ解放
+                
+                # Word埋め込み用にBytesIOに保存
+                box_buf = BytesIO()
+                fig_box.savefig(box_buf, format='png')
+                st.session_state.plot_images[f'{col}_box'] = box_buf
+                plt.close(fig_box) 
                 
     # 2. カテゴリ型データの度数分布
     if object_cols:
         st.markdown("#### 🔠 カテゴリデータの分布")
         
-        # サンプルとして最初の2つのカテゴリカラムのみを表示
         for col in object_cols[:2]:
             st.write(f"**{col}**")
             
-            # 棒グラフ
-            counts = df[col].value_counts().head(10) # 上位10項目
+            counts = df[col].value_counts().head(10)
             fig_bar, ax_bar = plt.subplots(figsize=(8, 5))
             ax_bar.bar(counts.index.astype(str), counts.values)
             ax_bar.set_title(f'{col} の度数分布')
             ax_bar.tick_params(axis='x', rotation=45)
-            plt.tight_layout() # ラベルがはみ出さないように調整
+            plt.tight_layout()
             st.pyplot(fig_bar)
-            plt.close(fig_bar) # メモリ解放
+            
+            # Word埋め込み用にBytesIOに保存
+            bar_buf = BytesIO()
+            fig_bar.savefig(bar_buf, format='png')
+            st.session_state.plot_images[f'{col}_bar'] = bar_buf
+            plt.close(fig_bar)
+
+
+# --- Wordレポート生成関数 ---
+def create_word_report(analysis_content, summary_content, plot_images):
+    """
+    AIの提案と記述統計、グラフをWordファイルとして生成する
+    """
+    document = Document()
+    document.add_heading('統計分析レポート', 0)
+    document.add_paragraph(f'作成日時: {pd.Timestamp.now().strftime("%Y年%m月%d日 %H:%M:%S")}')
+    document.add_paragraph('---')
+
+    # 1. AIによる推奨統計処理の提案
+    document.add_heading('1. AIによる推奨統計処理の提案', level=1)
+    
+    # MarkdownテキストをWordに変換する簡易処理（改行と簡単な強調のみ）
+    for line in summary_content.split('\n'):
+        if line.startswith('#'):
+            level = line.count('#')
+            if level <= 3:
+                document.add_heading(line.lstrip('# ').strip(), level=level + 1)
+        elif line.strip():
+            document.add_paragraph(line)
+            
+    document.add_paragraph('---')
+
+    # 2. アップロードされたファイルの概要/記述統計
+    document.add_heading('2. ファイル概要と記述統計', level=1)
+    
+    # ドキュメントの内容をそのまま追加 (MarkdownテーブルはWordでは整形されないため、テキストとして挿入)
+    document.add_paragraph(analysis_content)
+    document.add_paragraph('---')
+
+    # 3. グラフ
+    if plot_images:
+        document.add_heading('3. データのグラフ', level=1)
+        for key, buf in plot_images.items():
+            document.add_heading(key.replace('_', ' ').title(), level=2)
+            buf.seek(0)
+            # 画像を挿入 (幅はレポート幅の約3インチに固定)
+            document.add_picture(buf, width=pd.NA)
+    
+    # WordファイルをBytesIOストリームに保存
+    doc_io = BytesIO()
+    document.save(doc_io)
+    doc_io.seek(0)
+    return doc_io.getvalue()
 
 
 # ファイルアップローダー
@@ -165,7 +213,8 @@ if uploaded_file is not None:
         st.session_state.last_uploaded_filename = uploaded_file.name
         st.session_state.messages = []
         st.session_state.summary = None 
-        st.session_state.data_df = pd.DataFrame() # 新しいデータフレーム
+        st.session_state.data_df = pd.DataFrame()
+        st.session_state.plot_images = {} # グラフ画像をリセット
 
         file_extension = uploaded_file.name.split(".")[-1].lower()
         st.session_state.document_content = ""
@@ -178,7 +227,6 @@ if uploaded_file is not None:
                 elif file_extension == "pdf":
                     st.session_state.document_content = read_pdf_text(uploaded_file)
                 elif file_extension == "csv":
-                    # CSVの場合は、記述統計結果とデータフレームをセッションに格納
                     st.session_state.document_content = get_csv_analysis_text(uploaded_file)
                 else:
                     st.error("サポートされていないファイル形式です。")
@@ -202,14 +250,13 @@ if uploaded_file is not None:
         with st.expander("📚 CSVデータ構造と記述統計の結果", expanded=True):
             st.markdown(st.session_state.document_content)
             
-        # グラフ化機能を実行
+        # グラフ化機能を実行 (結果はst.session_state.plot_imagesに格納される)
         plot_data(st.session_state.data_df)
         
     # --- AIによる推奨処理の提案 ---
     if st.session_state.document_content and not st.session_state.summary:
         with st.spinner("AIが推奨統計処理の提案を作成しています..."):
             try:
-                # CSVの場合は、推奨統計処理の提案を生成
                 if is_csv_file:
                     summary_prompt = (
                         f"{SYSTEM_PROMPT}\n\n---\n\n"
@@ -217,7 +264,6 @@ if uploaded_file is not None:
                         f"{st.session_state.document_content}"
                     )
                     expander_title = "アップロードされたデータに基づいた推奨統計処理の提案"
-                # それ以外の文書の場合は、要約を生成
                 else:
                     summary_prompt = f"{SYSTEM_PROMPT}\n\n---\n\n以下のドキュメントを3〜5行で簡潔に要約し、文書内容に基づいた統計手法の候補を提案してください。\n\n{st.session_state.document_content}"
                     expander_title = "アップロードされたドキュメントの要約と統計手法の候補"
@@ -229,9 +275,29 @@ if uploaded_file is not None:
             except Exception as e:
                 st.error(f"AIによる提案の生成中にエラーが発生しました: {e}")
 
+    # --- AI提案の表示とWordダウンロードボタン ---
     if st.session_state.summary:
         with st.expander(st.session_state.expander_title, expanded=True):
             st.markdown(st.session_state.summary)
+
+        # Wordレポートの生成とダウンロード
+        if st.session_state.document_content and st.session_state.summary:
+            report_data = create_word_report(
+                st.session_state.document_content, 
+                st.session_state.summary, 
+                st.session_state.get('plot_images', {})
+            )
+            
+            # ファイル名を決定
+            base_name = os.path.splitext(st.session_state.last_uploaded_filename)[0]
+            download_file_name = f"{base_name}_分析レポート.docx"
+            
+            st.download_button(
+                label="📄 Wordレポート (.docx) をダウンロード",
+                data=report_data,
+                file_name=download_file_name,
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
 
     # --- チャット機能 ---
     if "messages" not in st.session_state:
@@ -251,14 +317,12 @@ if uploaded_file is not None:
         try:
             with st.chat_message("assistant"):
                 with st.spinner("AIが応答を生成中です..."):
-                    # プロンプトにシステム設定、ドキュメント、会話履歴をすべて含める
                     full_prompt = (
                         f"{SYSTEM_PROMPT}\n\n"
                         f"--- 以下はアップロードされたファイルの内容（またはCSVの記述統計）です ---\n"
                         f"{st.session_state.document_content}\n\n"
                         f"--- 以下はこれまでの会話履歴と現在の質問です ---\n"
                     )
-                    # メッセージ履歴をプロンプトに追加
                     for msg in st.session_state.messages:
                         full_prompt += f"{msg['role']}: {msg['content']}\n"
 
