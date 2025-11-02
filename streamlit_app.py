@@ -4,21 +4,28 @@ import os
 from pypdf import PdfReader 
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib import font_manager # ★【修正】font_managerをインポート
 from docx import Document
 from docx.shared import Inches
 from io import BytesIO
 
 # ==========================================================
-# ★【修正箇所】 Matplotlibで日本語フォントを設定
+# ★【修正箇所】 Matplotlibで日本語フォントを設定 (フォントパスを直接指定)
 # ==========================================================
-# 多くの環境で利用可能なIPAex Gothicを指定。
-# 環境にフォントがない場合、フォントのインストール（例: apt-get install fonts-ipaexfont）が必要です。
+FONT_PATH = 'ipaexg.ttf' # アプリケーションのルートディレクトリに配置するフォントファイル名
 try:
-    plt.rcParams['font.family'] = 'IPAexGothic'
+    # フォントプロパティを作成
+    font_prop = font_manager.FontProperties(fname=FONT_PATH)
+    plt.rcParams['font.family'] = font_prop.get_name()
     plt.rcParams['axes.unicode_minus'] = False # マイナス記号の表示を可能にする
-except Exception:
-    # IPAexGothicがない環境では、代わりにデフォルトのフォントを使用
+    
+    # グラフ描画時にフォントを明示的に指定できるように、プロパティをセッションに保存
+    st.session_state.font_prop = font_prop
+    
+except FileNotFoundError:
+    st.warning(f"警告: 日本語フォントファイル '{FONT_PATH}' が見つかりません。グラフの日本語が文字化けする可能性があります。")
     plt.rcParams['font.family'] = 'DejaVu Sans'
+    st.session_state.font_prop = None
 # ==========================================================
 
 
@@ -59,14 +66,12 @@ except Exception as e:
 SYSTEM_PROMPT = """
 あなたは、統計分析の専門家であり、教育者です。
 ユーザーから提供された文書（研究計画、分析のメモ、データ構造の概要など）を深く理解し、以下の役割を担ってください。
-# ... (SYSTEM_PROMPTは省略)
+...
 """
 
 # --- PDFファイルからテキストを抽出する関数 ---
 def read_pdf_text(pdf_file):
-    """
-    アップロードされたPDFファイルからすべてのページテキストを抽出する
-    """
+    # ... (read_pdf_text関数は省略)
     try:
         reader = PdfReader(pdf_file)
         text = ""
@@ -81,9 +86,7 @@ def read_pdf_text(pdf_file):
 
 # --- CSVファイルから構造と記述統計を抽出する関数 ---
 def get_csv_analysis_text(csv_file):
-    """
-    アップロードされたCSVファイルから構造、記述統計を抽出し、データフレームをセッションに保存する
-    """
+    # ... (get_csv_analysis_text関数は省略)
     try:
         csv_file.seek(0)
         df = pd.read_csv(csv_file)
@@ -116,7 +119,8 @@ def plot_data(df):
         return
 
     st.session_state.plot_images = {}
-    
+    font_prop = st.session_state.get('font_prop', None) # フォントプロパティを取得
+
     # 1. 数値型データのヒストグラム/箱ひげ図
     if numeric_cols:
         st.markdown("#### 🔢 数値データの分布")
@@ -124,14 +128,14 @@ def plot_data(df):
         
         for i, col in enumerate(numeric_cols[:4]):
             with cols[i % 2]:
-                # グラフのタイトルを日本語で表示
                 title = f'{col} のヒストグラム'
                 st.write(f"**{col}**")
                 
                 # ヒストグラム
                 fig_hist, ax_hist = plt.subplots(figsize=(6, 4))
                 ax_hist.hist(df[col].dropna(), bins='auto', edgecolor='black')
-                ax_hist.set_title(title)
+                # ★【修正】フォントプロパティを明示的に指定
+                ax_hist.set_title(title, fontproperties=font_prop if font_prop else None)
                 st.pyplot(fig_hist)
                 
                 hist_buf = BytesIO()
@@ -143,7 +147,8 @@ def plot_data(df):
                 title = f'{col} の箱ひげ図'
                 fig_box, ax_box = plt.subplots(figsize=(6, 4))
                 ax_box.boxplot(df[col].dropna())
-                ax_box.set_title(title)
+                # ★【修正】フォントプロパティを明示的に指定
+                ax_box.set_title(title, fontproperties=font_prop if font_prop else None)
                 st.pyplot(fig_box)
                 
                 box_buf = BytesIO()
@@ -162,8 +167,16 @@ def plot_data(df):
             title = f'{col} の度数分布'
             fig_bar, ax_bar = plt.subplots(figsize=(8, 5))
             ax_bar.bar(counts.index.astype(str), counts.values)
-            ax_bar.set_title(title)
-            # x軸ラベルも日本語対応が必要
+            # ★【修正】フォントプロパティを明示的に指定
+            ax_bar.set_title(title, fontproperties=font_prop if font_prop else None)
+            
+            # X軸のフォントも設定（tick_paramsではfontpropertiesを直接渡せないため、フォントマネージャーで設定したフォントを使う）
+            if font_prop:
+                for label in ax_bar.get_xticklabels():
+                    label.set_fontproperties(font_prop)
+                for label in ax_bar.get_yticklabels():
+                    label.set_fontproperties(font_prop)
+            
             ax_bar.tick_params(axis='x', rotation=45)
             plt.tight_layout()
             st.pyplot(fig_bar)
@@ -176,9 +189,7 @@ def plot_data(df):
 
 # --- Wordレポート生成関数 ---
 def create_word_report(analysis_content, summary_content, plot_images):
-    """
-    AIの提案と記述統計、グラフをWordファイルとして生成する
-    """
+    # ... (create_word_report関数は省略、変更なし)
     document = Document()
     document.add_heading('統計分析レポート', 0)
     document.add_paragraph(f'作成日時: {pd.Timestamp.now().strftime("%Y年%m月%d日 %H:%M:%S")}')
@@ -187,7 +198,6 @@ def create_word_report(analysis_content, summary_content, plot_images):
     # 1. AIによる推奨統計処理の提案
     document.add_heading('1. AIによる推奨統計処理の提案', level=1)
     
-    # MarkdownテキストをWordに変換する簡易処理
     for line in summary_content.split('\n'):
         if line.startswith('#'):
             level = line.count('#')
@@ -207,7 +217,7 @@ def create_word_report(analysis_content, summary_content, plot_images):
     # 3. グラフ
     if plot_images:
         document.add_heading('3. データのグラフ', level=1)
-        from docx.shared import Inches # 関数内で再度インポート（安全のため）
+        from docx.shared import Inches 
         for key, buf in plot_images.items():
             document.add_heading(key.replace('_', ' ').title(), level=2)
             buf.seek(0)
